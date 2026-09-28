@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>SecureGate Lite — Private</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>&#x1F512; SecureGate Lite</h1>
+    <span class="badge">PRIVATE</span>
+    <span class="badge compile-badge" id="compileBadge" style="background:#2a5fff;cursor:pointer" onclick="runCompile()">COMPILE CONTRACT</span>
+  </header>
+
+  <!-- 1. Keys & Addresses -->
+  <section class="card">
+    <h2>1 — Keys &amp; Addresses</h2>
+    <div class="grid2">
+      <label>Deployer Private Key
+        <input type="password" id="deployerKey" placeholder="0x…" autocomplete="off"/>
+      </label>
+      <label>Deployer Address (auto-derived)
+        <input type="text" id="deployerAddress" placeholder="Derived from key" readonly/>
+      </label>
+      <label>K1 Private Key <small>(used only for revoke sweep)</small>
+        <input type="password" id="k1Key" placeholder="0x…" autocomplete="off"/>
+      </label>
+      <label>K1 Address
+        <input type="text" id="k1Address" placeholder="0x…"/>
+      </label>
+      <label>K2 Address <small>(permanent on-chain authorizer)</small>
+        <input type="text" id="k2Address" placeholder="0x…"/>
+      </label>
+      <label>K3 Address <small>(immutable forced destination)</small>
+        <input type="text" id="k3Address" placeholder="0x…"/>
+      </label>
+    </div>
+  </section>
+
+  <!-- 2. Chain -->
+  <section class="card">
+    <h2>2 — Chain Selector</h2>
+    <div class="grid2">
+      <label>Chain
+        <select id="chainSelect"><option value="">Loading…</option></select>
+      </label>
+      <label>RPC Override <small>(optional)</small>
+        <input type="text" id="rpcOverride" placeholder="Leave blank for default"/>
+      </label>
+      <label>Gas Limit Override <small>(optional)</small>
+        <input type="number" id="gasLimitOverride" placeholder="e.g. 1000000"/>
+      </label>
+    </div>
+    <button class="btn secondary" onclick="runGasEstimate()">&#x1F4CA; Estimate Gas</button>
+    <div id="gasResult" class="result-box hidden"></div>
+  </section>
+
+  <!-- 3. Revocations -->
+  <section class="card">
+    <h2>3 — Revoke Approvals &amp; Operators</h2>
+    <p class="note">ERC-20 approve(0) · ERC-721/1155 setApprovalForAll(false) · ERC-777 revokeOperator — all signed by K1 key. Revocations queued here run automatically inside the deploy sequence.</p>
+    <div id="revokeList"></div>
+    <div class="revoke-add">
+      <select id="revokeType">
+        <option value="erc20">ERC-20</option>
+        <option value="erc721">ERC-721</option>
+        <option value="erc1155">ERC-1155</option>
+        <option value="erc777">ERC-777</option>
+      </select>
+      <input type="text" id="revokeToken" placeholder="Token address 0x…"/>
+      <input type="text" id="revokeOperator" placeholder="Spender / Operator 0x…"/>
+      <button class="btn secondary" onclick="addRevoke()">+ Add</button>
+    </div>
+    <div id="revokeLog" class="log-box hidden"></div>
+  </section>
+
+  <!-- 4. Deploy (single button — triggers full sequence) -->
+  <section class="card">
+    <h2>4 — Deploy SecureGate</h2>
+    <p class="note">Fill in all fields above, select your chain, then click DEPLOY. The dashboard will automatically: estimate gas → validate preflight → run any queued revocations → deploy the contract → verify all immutables on-chain.</p>
+    <div id="preflightSummary" class="preflight hidden"></div>
+    <button class="btn primary big" id="btnDeploy" onclick="runFullDeploy()">&#x1F680; DEPLOY SECUREGATE</button>
+    <div class="progress-wrap hidden" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+      <span id="progressLabel">Initialising…</span>
+    </div>
+    <div id="deployLog" class="log-box hidden"></div>
+  </section>
+
+  <!-- 5. Verify -->
+  <section class="card">
+    <h2>5 — Post-Deploy Verification</h2>
+    <label>Contract Address
+      <input type="text" id="verifyAddress" placeholder="0x… (auto-filled after deploy)"/>
+    </label>
+    <button class="btn secondary" onclick="runVerify()">&#x1F50D; Run Verification</button>
+    <div id="verifyResult" class="result-box hidden"></div>
+  </section>
+
+  <!-- 6. Audit Log -->
+  <section class="card">
+    <h2>6 — Audit Log</h2>
+    <div id="auditLog" class="log-box audit"></div>
+    <button class="btn secondary small" onclick="clearAudit()">Clear</button>
+    <button class="btn secondary small" onclick="exportAudit()">Export .log</button>
+  </section>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "chains": [
+    {"id":1,"name":"Ethereum Mainnet","symbol":"ETH","rpc":"https://eth.llamarpc.com","explorer":"https://etherscan.io"},
+    {"id":8453,"name":"Base","symbol":"ETH","rpc":"https://mainnet.base.org","explorer":"https://basescan.org"},
+    {"id":10,"name":"Optimism","symbol":"ETH","rpc":"https://mainnet.optimism.io","explorer":"https://optimistic.etherscan.io"},
+    {"id":42161,"name":"Arbitrum One","symbol":"ETH","rpc":"https://arb1.arbitrum.io/rpc","explorer":"https://arbiscan.io"},
+    {"id":137,"name":"Polygon","symbol":"MATIC","rpc":"https://polygon-rpc.com","explorer":"https://polygonscan.com"},
+    {"id":56,"name":"BNB Smart Chain","symbol":"BNB","rpc":"https://bsc-dataseed.binance.org","explorer":"https://bscscan.com"},
+    {"id":43114,"name":"Avalanche C-Chain","symbol":"AVAX","rpc":"https://api.avax.network/ext/bc/C/rpc","explorer":"https://snowtrace.io"},
+    {"id":250,"name":"Fantom Opera","symbol":"FTM","rpc":"https://rpc.ftm.tools","explorer":"https://ftmscan.com"},
+    {"id":100,"name":"Gnosis Chain","symbol":"xDAI","rpc":"https://rpc.gnosischain.com","explorer":"https://gnosisscan.io"},
+    {"id":1101,"name":"Polygon zkEVM","symbol":"ETH","rpc":"https://zkevm-rpc.com","explorer":"https://zkevm.polygonscan.com"},
+    {"id":324,"name":"zkSync Era","symbol":"ETH","rpc":"https://mainnet.era.zksync.io","explorer":"https://explorer.zksync.io"},
+    {"id":59144,"name":"Linea","symbol":"ETH","rpc":"https://rpc.linea.build","explorer":"https://lineascan.build"},
+    {"id":534352,"name":"Scroll","symbol":"ETH","rpc":"https://rpc.scroll.io","explorer":"https://scrollscan.com"},
+    {"id":11155111,"name":"Sepolia Testnet","symbol":"ETH","rpc":"https://rpc.sepolia.org","explorer":"https://sepolia.etherscan.io"}
+  ]
+}
