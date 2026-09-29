@@ -14,8 +14,56 @@ function loadArtifact() {
     art.abi = fresh.abi; art.bytecode = fresh.bytecode; art.deployedBytecode = fresh.deployedBytecode;
   }
   if (!art.abi || !art.bytecode || art.bytecode === '0x')
-    throw new Error('Artifact has no bytecode. Run COMPILE CONTRACT first.');
+    throw new Error('Artifact has no bytecode. Compile step must run first.');
   return art;
+}
+
+// Flashbots relay URL per chain (null = use standard RPC)
+const FLASHBOTS_RELAY = {
+  1:    'https://relay.flashbots.net',
+  5:    'https://relay-goerli.flashbots.net',
+  11155111: null  // Sepolia — no Flashbots relay; use RPC
+};
+
+/**
+ * Attempt deploy up to maxAttempts times.
+ * On Ethereum mainnet, tries Flashbots relay first, falls back to standard RPC.
+ */
+async function deployWithRetry(abi, bytecode, deployer, provider, k1Address, k2Address, k3Address, opts, chainId, rpcUrl, send, maxAttempts = 3) {
+  let lastErr;
+  const useFlashbots = FLASHBOTS_RELAY[chainId] !== undefined && FLASHBOTS_RELAY[chainId] !== null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      let txProvider = provider;
+      let txSigner   = deployer;
+
+      if (useFlashbots && attempt === 1) {
+        send({ pct: 36, status: 'FLASHBOTS', message: 'Attempt ' + attempt + '/' + maxAttempts + ' — broadcasting via Flashbots relay...' });
+        // For Flashbots: we use the standard provider but set custom headers via a wrapped fetch
+        // ethers v6 doesn’t natively support Flashbots bundle submission, so we do direct RPC
+        // and rely on the mev-share compatible relay accepting eth_sendRawTransaction
+        const fbProvider = new ethers.JsonRpcProvider(FLASHBOTS_RELAY[chainId]);
+        txProvider = fbProvider;
+        txSigner   = deployer.connect(fbProvider);
+      } else {
+        send({ pct: 36, status: 'DEPLOYING', message: 'Attempt ' + attempt + '/' + maxAttempts + ' — broadcasting via standard RPC...' });
+      }
+
+      const factory  = new ethers.ContractFactory(abi, bytecode, txSigner);
+      const contract = await factory.deploy(k1Address, k2Address, k3Address, opts);
+      const txHash   = contract.deploymentTransaction().hash;
+      send({ pct: 55, status: 'PENDING', message: 'Tx submitted: ' + txHash });
+
+      const receipt = await contract.deploymentTransaction().wait(1);
+      return receipt;
+    } catch (e) {
+      lastErr = e;
+      send({ pct: 36, status: 'RETRY', message: 'Attempt ' + attempt + ' failed: ' + e.message + (attempt < maxAttempts ? ' — retrying...' : '') });
+      if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
+  throw lastErr;
 }
 
 router.post('/', async (req, res) => {
@@ -39,48 +87,48 @@ router.post('/', async (req, res) => {
   const send = obj => res.write(JSON.stringify(obj) + '\n');
 
   try {
-    send({ step:1, pct:5,  status:'COMPILING', message:'Loading contract artifact...' });
+    send({ step:1, pct:5, status:'COMPILING', message:'Loading / compiling contract artifact...' });
     const { abi, bytecode } = loadArtifact();
+    send({ step:1, pct:12, status:'OK', message:'Artifact loaded. Bytecode: ' + ((bytecode.length-2)/2) + ' bytes.' });
 
-    send({ step:1, pct:10, status:'CHECKING',  message:'Connecting to ' + chain.name + '...' });
-    const provider = new ethers.JsonRpcProvider(rpcOverride || chain.rpc);
+    send({ step:1, pct:15, status:'CHECKING', message:'Connecting to ' + chain.name + '...' });
+    const rpcUrl   = rpcOverride || chain.rpc;
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
     const deployer = new ethers.Wallet(deployerKey, provider);
 
-    const balance = await provider.getBalance(deployer.address);
-    send({ step:1, pct:15, status:'OK', message:'Deployer ' + deployer.address + ' — balance: ' + ethers.formatEther(balance) + ' ' + chain.symbol });
+    const balance  = await provider.getBalance(deployer.address);
+    send({ step:1, pct:18, status:'OK', message:'Deployer: ' + deployer.address + '  balance: ' + ethers.formatEther(balance) + ' ' + chain.symbol });
 
     if (balance === 0n) {
-      send({ step:1, pct:0, status:'ERROR', message:'Deployer balance is zero. Fund it before deploying.' });
+      send({ step:1, pct:0, status:'ERROR', message:'Deployer balance is zero. Fund the deployer address before proceeding.' });
       return res.end();
     }
 
-    send({ step:2, pct:30, status:'DEPLOYING', message:'Broadcasting deployment on ' + chain.name + '...' });
-    const factory = new ethers.ContractFactory(abi, bytecode, deployer);
-    const opts    = gasLimitOverride ? { gasLimit: BigInt(gasLimitOverride) } : {};
-    const contract = await factory.deploy(k1Address, k2Address, k3Address, opts);
-    const txHash   = contract.deploymentTransaction().hash;
-    send({ step:2, pct:50, status:'PENDING', message:'Tx submitted: ' + txHash });
+    const opts = gasLimitOverride ? { gasLimit: BigInt(gasLimitOverride) } : {};
 
-    const receipt = await contract.deploymentTransaction().wait(1);
-    send({ step:3, pct:70, status:'CONFIRMED', message:'Confirmed block ' + receipt.blockNumber + ' — gas used: ' + receipt.gasUsed.toString(), contractAddress: receipt.contractAddress });
+    send({ step:2, pct:35, status:'DEPLOYING', message:'Initiating deployment sequence...' });
+    const receipt = await deployWithRetry(abi, bytecode, deployer, provider, k1Address, k2Address, k3Address, opts, Number(chainId), rpcUrl, send);
+
+    send({ step:3, pct:72, status:'CONFIRMED', message:'Confirmed at block ' + receipt.blockNumber + ' — gas used: ' + receipt.gasUsed.toString(), contractAddress: receipt.contractAddress });
 
     send({ step:4, pct:85, status:'VERIFYING', message:'Reading on-chain immutables...' });
     const deployed = new ethers.Contract(receipt.contractAddress, abi, provider);
     const [onK1, onK2, onK3, onChainId] = await Promise.all([deployed.K1(), deployed.K2(), deployed.K3(), deployed.GATE_CHAIN_ID()]);
 
-    const ok1 = onK1.toLowerCase() === k1Address.toLowerCase();
-    const ok2 = onK2.toLowerCase() === k2Address.toLowerCase();
-    const ok3 = onK3.toLowerCase() === k3Address.toLowerCase();
-    const okC = Number(onChainId)   === Number(chainId);
-
-    if (!ok1 || !ok2 || !ok3 || !okC) {
-      send({ step:4, pct:0, status:'MISMATCH', message:'CRITICAL: on-chain keys or chain ID do not match inputs.', onChain:{ K1:onK1, K2:onK2, K3:onK3, chainId:onChainId.toString() } });
+    if (
+      onK1.toLowerCase() !== k1Address.toLowerCase() ||
+      onK2.toLowerCase() !== k2Address.toLowerCase() ||
+      onK3.toLowerCase() !== k3Address.toLowerCase() ||
+      Number(onChainId)  !== Number(chainId)
+    ) {
+      send({ step:4, pct:0, status:'MISMATCH', message:'CRITICAL: on-chain immutables do not match inputs. DO NOT USE this deployment.', onChain:{ K1:onK1, K2:onK2, K3:onK3, chainId:onChainId.toString() } });
       return res.end();
     }
 
     const result = {
       contractAddress: receipt.contractAddress,
-      txHash, blockNumber: receipt.blockNumber,
+      txHash:          receipt.hash,
+      blockNumber:     receipt.blockNumber,
       gasUsed:         receipt.gasUsed.toString(),
       chain:           chain.name,
       chainId:         chain.id,
@@ -90,7 +138,7 @@ router.post('/', async (req, res) => {
       timestamp:       new Date().toISOString()
     };
 
-    send({ step:5, pct:100, status:'COMPLETE', message:'\u2705 SecureGate is live. All immutables verified.', result });
+    send({ step:5, pct:100, status:'COMPLETE', message:'✅ SecureGate is live. All immutables verified on-chain.', result });
     res.end();
   } catch(e) {
     send({ pct:0, status:'ERROR', message: e.message });

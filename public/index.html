@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>SecureGate Lite — Private</title>
+  <title>SecureGate Lite — Operator</title>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 <div id="app">
   <header>
-    <h1>&#x1F512; SecureGate Lite</h1>
-    <span class="badge">PRIVATE</span>
-    <span class="badge compile-badge" id="compileBadge" style="background:#2a5fff;cursor:pointer" onclick="runCompile()">COMPILE CONTRACT</span>
+    <h1>&#x1F512; SecureGate Lite <span class="v">v2</span></h1>
+    <span class="badge">PRIVATE OPERATOR</span>
+    <span class="badge compile-badge" id="compileBadge" onclick="runCompile()">COMPILE CONTRACT</span>
   </header>
 
   <!-- 1. Keys & Addresses -->
@@ -21,10 +21,10 @@
       <label>Deployer Private Key
         <input type="password" id="deployerKey" placeholder="0x…" autocomplete="off"/>
       </label>
-      <label>Deployer Address (auto-derived)
+      <label>Deployer Address <small>(auto-derived)</small>
         <input type="text" id="deployerAddress" placeholder="Derived from key" readonly/>
       </label>
-      <label>K1 Private Key <small>(used only for revoke sweep)</small>
+      <label>K1 Private Key <small>(signs revocations &amp; queue txs)</small>
         <input type="password" id="k1Key" placeholder="0x…" autocomplete="off"/>
       </label>
       <label>K1 Address
@@ -41,10 +41,10 @@
 
   <!-- 2. Chain -->
   <section class="card">
-    <h2>2 — Chain Selector</h2>
+    <h2>2 — Chain &amp; RPC</h2>
     <div class="grid2">
       <label>Chain
-        <select id="chainSelect"><option value="">Loading…</option></select>
+        <select id="chainSelect"><option value="">Select chain…</option></select>
       </label>
       <label>RPC Override <small>(optional)</small>
         <input type="text" id="rpcOverride" placeholder="Leave blank for default"/>
@@ -52,46 +52,50 @@
       <label>Gas Limit Override <small>(optional)</small>
         <input type="number" id="gasLimitOverride" placeholder="e.g. 1000000"/>
       </label>
+      <label>Sweep Lookback <small>(blocks, default 500k)</small>
+        <input type="number" id="lookbackBlocks" placeholder="500000" value="500000"/>
+      </label>
     </div>
     <button class="btn secondary" onclick="runGasEstimate()">&#x1F4CA; Estimate Gas</button>
     <div id="gasResult" class="result-box hidden"></div>
   </section>
 
-  <!-- 3. Revocations -->
-  <section class="card">
-    <h2>3 — Revoke Approvals &amp; Operators</h2>
-    <p class="note">ERC-20 approve(0) · ERC-721/1155 setApprovalForAll(false) · ERC-777 revokeOperator — all signed by K1 key. Revocations queued here run automatically inside the deploy sequence.</p>
-    <div id="revokeList"></div>
-    <div class="revoke-add">
-      <select id="revokeType">
-        <option value="erc20">ERC-20</option>
-        <option value="erc721">ERC-721</option>
-        <option value="erc1155">ERC-1155</option>
-        <option value="erc777">ERC-777</option>
-      </select>
-      <input type="text" id="revokeToken" placeholder="Token address 0x…"/>
-      <input type="text" id="revokeOperator" placeholder="Spender / Operator 0x…"/>
-      <button class="btn secondary" onclick="addRevoke()">+ Add</button>
-    </div>
-    <div id="revokeLog" class="log-box hidden"></div>
-  </section>
+  <!-- 3. DEPLOY (single button — full blitz) -->
+  <section class="card deploy-card">
+    <h2>3 — Deploy SecureGate</h2>
+    <p class="note">Fill in all fields above then click DEPLOY. The sequence runs automatically:
+      <strong>compile → gas check → on-chain sweep of ALL K1 approvals &amp; delegates → revoke everything found → Flashbots deploy (with retry) → on-chain verification.</strong>
+      No manual steps required.
+    </p>
 
-  <!-- 4. Deploy (single button — triggers full sequence) -->
-  <section class="card">
-    <h2>4 — Deploy SecureGate</h2>
-    <p class="note">Fill in all fields above, select your chain, then click DEPLOY. The dashboard will automatically: estimate gas → validate preflight → run any queued revocations → deploy the contract → verify all immutables on-chain.</p>
     <div id="preflightSummary" class="preflight hidden"></div>
-    <button class="btn primary big" id="btnDeploy" onclick="runFullDeploy()">&#x1F680; DEPLOY SECUREGATE</button>
+
+    <button class="btn primary big" id="btnDeploy" onclick="runBlitz()">
+      &#x1F680; DEPLOY SECUREGATE
+    </button>
+
+    <!-- Progress bar -->
     <div class="progress-wrap hidden" id="progressWrap">
       <div class="progress-bar" id="progressBar"></div>
       <span id="progressLabel">Initialising…</span>
     </div>
+
+    <!-- Phase strip -->
+    <div class="phase-strip hidden" id="phaseStrip">
+      <div class="phase-pill" id="ph1">1·Compile</div>
+      <div class="phase-pill" id="ph2">2·Gas</div>
+      <div class="phase-pill" id="ph3">3·Sweep</div>
+      <div class="phase-pill" id="ph4">4·Revoke</div>
+      <div class="phase-pill" id="ph5">5·Deploy</div>
+      <div class="phase-pill" id="ph6">6·Verify</div>
+    </div>
+
     <div id="deployLog" class="log-box hidden"></div>
   </section>
 
-  <!-- 5. Verify -->
+  <!-- 4. Verify (standalone) -->
   <section class="card">
-    <h2>5 — Post-Deploy Verification</h2>
+    <h2>4 — Post-Deploy Verification</h2>
     <label>Contract Address
       <input type="text" id="verifyAddress" placeholder="0x… (auto-filled after deploy)"/>
     </label>
@@ -99,9 +103,9 @@
     <div id="verifyResult" class="result-box hidden"></div>
   </section>
 
-  <!-- 6. Audit Log -->
+  <!-- 5. Audit Log -->
   <section class="card">
-    <h2>6 — Audit Log</h2>
+    <h2>5 — Audit Log</h2>
     <div id="auditLog" class="log-box audit"></div>
     <button class="btn secondary small" onclick="clearAudit()">Clear</button>
     <button class="btn secondary small" onclick="exportAudit()">Export .log</button>
